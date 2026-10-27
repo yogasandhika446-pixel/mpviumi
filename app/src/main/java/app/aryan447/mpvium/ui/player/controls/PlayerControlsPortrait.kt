@@ -1,0 +1,220 @@
+package app.aryan447.mpvium.ui.player.controls
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import app.aryan447.mpvium.preferences.PlayerButton
+import app.aryan447.mpvium.ui.player.Panels
+import app.aryan447.mpvium.ui.player.PlayerActivity
+import app.aryan447.mpvium.ui.player.PlayerViewModel
+import app.aryan447.mpvium.ui.player.Sheets
+import app.aryan447.mpvium.ui.player.VideoAspect
+import app.aryan447.mpvium.ui.player.controls.components.ControlsButton
+import app.aryan447.mpvium.ui.player.controls.components.ControlsGroup
+import app.aryan447.mpvium.ui.theme.spacing
+import dev.vivvvek.seeker.Segment
+
+@Composable
+fun TopPlayerControlsPortrait(
+  mediaTitle: String?,
+  mediaSubtitle: String?,
+  mediaSubtitleIsPrimary: Boolean,
+  hideBackground: Boolean,
+  onBackPress: () -> Unit,
+  onOpenSheet: (Sheets) -> Unit,
+  viewModel: PlayerViewModel,
+) {
+  val playlistModeEnabled = viewModel.hasPlaylistSupport()
+  val clickEvent = LocalPlayerButtonsClickEvent.current
+  val colors = LocalPlayerColors.current
+
+  Column {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      ControlsGroup {
+        ControlsButton(
+          icon = Icons.AutoMirrored.Default.ArrowBack,
+          onClick = onBackPress,
+        )
+
+        val titleInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+
+        androidx.compose.foundation.layout.Box(
+          modifier =
+            Modifier
+              .clip(RoundedCornerShape(50))
+              .clickable(
+                enabled = playlistModeEnabled,
+                onClick = {
+                  clickEvent()
+                  onOpenSheet(Sheets.Playlist)
+                },
+              ),
+        ) {
+          Surface(
+            shape = RoundedCornerShape(50),
+            color = if (hideBackground) Color.Transparent else colors.controlFill,
+            contentColor = if (hideBackground) colors.onVideoContent else colors.controlContent,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = if (hideBackground) null else BorderStroke(1.dp, colors.controlBorder),
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+              modifier =
+                Modifier.padding(
+                  horizontal = MaterialTheme.spacing.medium,
+                  vertical = MaterialTheme.spacing.small,
+                ),
+            ) {
+              viewModel.getPlaylistInfo()?.let { playlistInfo ->
+                Text(
+                  text = playlistInfo,
+                  textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                  style = MaterialTheme.typography.bodyMedium,
+                  maxLines = 1,
+                  overflow = TextOverflow.Visible,
+                  fontFamily = FontFamily.Monospace,
+                  color = if (hideBackground) colors.onVideoContent else colors.accent,
+                )
+                Text(
+                  text = Typography.bullet.toString(),
+                  textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                  style = MaterialTheme.typography.bodyMedium,
+                  maxLines = 1,
+                  color = if (hideBackground) colors.onVideoContent else colors.controlContent,
+                  overflow = TextOverflow.Clip,
+                )
+              }
+              Column(
+                modifier = Modifier.weight(1f, fill = false),
+              ) {
+                if (mediaSubtitle != null) {
+                  val textColor =
+                    if (hideBackground) colors.onVideoContent else colors.controlContent
+                  val firstLineIsPrimary = !mediaSubtitleIsPrimary
+                  Text(
+                    text = mediaTitle ?: "",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style =
+                      if (firstLineIsPrimary) {
+                        MaterialTheme.typography.bodyMedium
+                      } else {
+                        MaterialTheme.typography.bodySmall
+                      },
+                    fontFamily = FontFamily.Monospace,
+                    color = textColor.copy(alpha = if (firstLineIsPrimary) 1f else 0.7f),
+                  )
+                  Text(
+                    text = mediaSubtitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style =
+                      if (mediaSubtitleIsPrimary) {
+                        MaterialTheme.typography.bodyMedium
+                      } else {
+                        MaterialTheme.typography.bodySmall
+                      },
+                    fontFamily = FontFamily.Monospace,
+                    color = textColor.copy(alpha = if (mediaSubtitleIsPrimary) 1f else 0.7f),
+                  )
+                } else {
+                  Text(
+                    text = mediaTitle ?: "",
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (hideBackground) colors.onVideoContent else colors.controlContent,
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun BottomPlayerControlsPortrait(
+  buttons: List<PlayerButton>,
+  chapters: List<Segment>,
+  currentChapter: Int?,
+  isSpeedNonOne: Boolean,
+  currentZoom: Float,
+  aspect: VideoAspect,
+  mediaTitle: String?,
+  hideBackground: Boolean,
+  decoder: app.aryan447.mpvium.ui.player.Decoder,
+  playbackSpeed: Float,
+  onBackPress: () -> Unit,
+  onOpenSheet: (Sheets) -> Unit,
+  onOpenPanel: (Panels) -> Unit,
+  viewModel: PlayerViewModel,
+  activity: PlayerActivity,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(bottom = MaterialTheme.spacing.large)
+      .horizontalScroll(rememberScrollState()),
+    horizontalArrangement = Arrangement.Center,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    ControlsGroup {
+      buttons.forEach { button ->
+        RenderPlayerButton(
+          button = button,
+          chapters = chapters,
+          currentChapter = currentChapter,
+          isPortrait = true,
+          isSpeedNonOne = isSpeedNonOne,
+          currentZoom = currentZoom,
+          aspect = aspect,
+          mediaTitle = mediaTitle,
+          hideBackground = hideBackground,
+          onBackPress = onBackPress,
+          onOpenSheet = onOpenSheet,
+          onOpenPanel = onOpenPanel,
+          viewModel = viewModel,
+          activity = activity,
+          decoder = decoder,
+          playbackSpeed = playbackSpeed,
+          buttonSize = 48.dp,
+        )
+      }
+    }
+  }
+}
+

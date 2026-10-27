@@ -1,0 +1,398 @@
+package app.aryan447.mpvium.ui.preferences
+
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.util.Log
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import app.aryan447.mpvium.R
+import app.aryan447.mpvium.preferences.DecoderPreferences
+import app.aryan447.mpvium.preferences.preference.collectAsState
+import app.aryan447.mpvium.presentation.Screen
+import app.aryan447.mpvium.ui.player.Debanding
+import app.aryan447.mpvium.ui.player.Decoder
+import app.aryan447.mpvium.ui.player.MPVProfile
+import app.aryan447.mpvium.ui.preferences.VulkanUtils
+import app.aryan447.mpvium.ui.theme.glassSheetContainerColor
+import kotlinx.serialization.Serializable
+import me.zhanghai.compose.preference.ProvidePreferenceLocals
+import org.koin.compose.koinInject
+
+@Serializable
+object DecoderPreferencesScreen : Screen {
+  @OptIn(ExperimentalMaterial3Api::class)
+  @Composable
+  override fun Content() {
+    val preferences = koinInject<DecoderPreferences>()
+    val context = LocalContext.current
+    val isVulkanSupported = remember { VulkanUtils.isVulkanSupported(context) }
+    val useVulkan by preferences.useVulkan.collectAsState()
+    var showGpuNextWarning by remember { mutableStateOf(false) }
+    Scaffold(
+      topBar = {
+        SettingsTopBar(title = stringResource(R.string.pref_decoder))
+      },
+    ) { padding ->
+      ProvidePreferenceLocals {
+        LazyColumn(
+          modifier =
+            Modifier
+              .fillMaxSize()
+              .padding(padding),
+        ) {
+          item {
+            PreferenceSectionHeader(title = stringResource(R.string.pref_decoder), count = 2)
+          }
+
+          item {
+            PreferenceCard {
+              val profile by preferences.profile.collectAsState()
+              val currentProfile = MPVProfile.fromValue(profile)
+              ExpressiveListPreference(
+                value = currentProfile,
+                onValueChange = { preferences.profile.set(it.value) },
+                values = MPVProfile.entries,
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Settings) },
+                title = { Text(stringResource(R.string.pref_decoder_profile_title)) },
+                summary = {
+                  Text(
+                    currentProfile.displayName,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+
+              PreferenceDivider()
+
+              val defaultDecoder by preferences.defaultDecoder.collectAsState()
+              ExpressiveListPreference(
+                value = defaultDecoder,
+                onValueChange = { preferences.defaultDecoder.set(it) },
+                values = Decoder.defaultOptions,
+                valueToText = { AnnotatedString(it.title) },
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Memory) },
+                title = { Text(stringResource(R.string.pref_decoder_default_title)) },
+                summary = {
+                  Text(
+                    stringResource(defaultDecoder.descriptionRes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+            }
+          }
+
+          item {
+            PreferenceSectionHeader(title = "GPU", count = 2)
+          }
+
+          item {
+            PreferenceCard {
+              val gpuNext by preferences.gpuNext.collectAsState()
+              HapticSwitchPreference(
+                value = gpuNext,
+                onValueChange = { enabled ->
+                    if (enabled && !gpuNext && !useVulkan) { // Only show warning if Vulkan is disabled
+                        showGpuNextWarning = true
+                    } else {
+                        preferences.gpuNext.set(enabled)
+                        if (enabled && !useVulkan) { // Only disable Anime4K if Vulkan is disabled
+                            preferences.enableAnime4K.set(false)
+                        }
+                    }
+                },
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Speed) },
+                title = { Text(stringResource(R.string.pref_decoder_gpu_next_title)) },
+                summary = {
+                  Text(
+                    stringResource(R.string.pref_decoder_gpu_next_summary),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+
+              if (showGpuNextWarning) {
+                  AlertDialog(
+                      onDismissRequest = { showGpuNextWarning = false },
+                      containerColor = glassSheetContainerColor(MaterialTheme.colorScheme.surface),
+                      title = { Text(stringResource(R.string.pref_decoder_gpu_next_enable_title)) },
+                      text = {
+                          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                              Text(stringResource(R.string.pref_decoder_gpu_next_warning))
+                              Text(stringResource(R.string.pref_decoder_gpu_next_purple_screen_fix))
+
+                              Surface(
+                                  color = MaterialTheme.colorScheme.errorContainer,
+                                  shape = MaterialTheme.shapes.small
+                              ) {
+                                  Column(modifier = Modifier.padding(8.dp)) {
+                                      Text(
+                                          text = stringResource(R.string.pref_anime4k_incompatibility),
+                                          style = MaterialTheme.typography.titleSmall,
+                                          color = MaterialTheme.colorScheme.onErrorContainer
+                                      )
+                                      Text(
+                                          text = stringResource(R.string.pref_anime4k_gpu_next_error),
+                                          style = MaterialTheme.typography.bodySmall,
+                                          color = MaterialTheme.colorScheme.onErrorContainer
+                                      )
+                                  }
+                              }
+                          }
+                      },
+                      confirmButton = {
+                          Button(onClick = {
+                              preferences.gpuNext.set(true)
+                              preferences.enableAnime4K.set(false) // Ensure Anime4K is disabled on confirmation
+                              showGpuNextWarning = false
+                          }) {
+                              Text(stringResource(R.string.pref_decoder_gpu_next_enable_anyway))
+                          }
+                      },
+                      dismissButton = {
+                          TextButton(onClick = { showGpuNextWarning = false }) {
+                              Text(stringResource(R.string.generic_cancel))
+                          }
+                      }
+                  )
+              }
+
+              PreferenceDivider()
+
+              // val useVulkan by preferences.useVulkan.collectAsState() // Moved to Content() top-level for cross-card access
+              HapticSwitchPreference(
+                value = useVulkan,
+                onValueChange = { enabled ->
+                  preferences.useVulkan.set(enabled)
+                  // When Vulkan is disabled, ensure Anime4K and GPU Next are not both enabled
+                  if (!enabled) {
+                    val anime4kEnabled = preferences.enableAnime4K.get()
+                    val gpuNextEnabled = preferences.gpuNext.get()
+                    if (anime4kEnabled && gpuNextEnabled) {
+                      // Disable GPU Next to keep Anime4K
+                      preferences.gpuNext.set(false)
+                    }
+                  }
+                },
+                enabled = isVulkanSupported,
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Dns) },
+                title = { Text(stringResource(R.string.pref_decoder_vulkan_title) + " (Experimental)") },
+                summary = {
+                  Text(
+                    stringResource(
+                      if (isVulkanSupported) R.string.pref_decoder_vulkan_summary
+                      else R.string.pref_decoder_vulkan_not_supported
+                    ),
+                    color = if (isVulkanSupported) MaterialTheme.colorScheme.outline
+                           else MaterialTheme.colorScheme.error,
+                  )
+                },
+              )
+            }
+          }
+
+          item {
+            PreferenceSectionHeader(title = "Post-processing", count = 4)
+          }
+
+          item {
+            PreferenceCard {
+              val debanding by preferences.debanding.collectAsState()
+              ExpressiveListPreference(
+                value = debanding,
+                onValueChange = { preferences.debanding.set(it) },
+                values = Debanding.entries,
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Tune) },
+                title = { Text(stringResource(R.string.pref_decoder_debanding_title)) },
+                summary = {
+                  Text(
+                    debanding.name,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+
+              PreferenceDivider()
+
+              val useYUV420p by preferences.useYUV420P.collectAsState()
+              HapticSwitchPreference(
+                value = useYUV420p,
+                onValueChange = {
+                  preferences.useYUV420P.set(it)
+                },
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Layers) },
+                title = { Text(stringResource(R.string.pref_decoder_yuv420p_title)) },
+                summary = {
+                  Text(
+                    stringResource(R.string.pref_decoder_yuv420p_summary),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+
+              PreferenceDivider()
+
+              val enableAnime4K by preferences.enableAnime4K.collectAsState()
+              HapticSwitchPreference(
+                value = enableAnime4K,
+                onValueChange = { enabled ->
+                    preferences.enableAnime4K.set(enabled)
+                    if (enabled && !useVulkan) { // Only disable GPU Next if Vulkan is disabled
+                        preferences.gpuNext.set(false)
+                    }
+                },
+                title = { Text(stringResource(R.string.pref_anime4k_title)) },
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Refresh) },
+                summary = {
+                  Text(
+                    stringResource(R.string.pref_anime4k_summary),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/bloc97/Anime4K"))
+                    context.startActivity(intent)
+                  }
+                  .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                PreferenceIconBox(
+                  icon = Icons.Outlined.OpenInNew,
+                  boxSize = 32.dp,
+                  iconSize = 18.dp,
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                  text = "github.com/bloc97/Anime4K",
+                  color = MaterialTheme.colorScheme.primary,
+                  style = MaterialTheme.typography.bodySmall,
+                  textDecoration = TextDecoration.Underline,
+                )
+              }
+
+              PreferenceDivider()
+
+              val shaderPeekSuggest by preferences.shaderPeekSuggest.collectAsState()
+              HapticSwitchPreference(
+                value = shaderPeekSuggest,
+                onValueChange = { preferences.shaderPeekSuggest.set(it) },
+                icon = { PreferenceRowIcon(icon = Icons.Outlined.Visibility) },
+                title = { Text(stringResource(R.string.pref_decoder_shader_peek_title)) },
+                summary = {
+                  Text(
+                    stringResource(R.string.pref_decoder_shader_peek_summary),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                },
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+object VulkanUtils {
+    private const val TAG = "VulkanUtils"
+
+    /**
+     * Checks if the device supports Vulkan for MPV rendering
+     *
+     * Requirements for MPV androidvk context:
+     * - Android 13 (API 33) minimum for Vulkan 1.3
+     * - Vulkan 1.3 (0x00403000) hardware version
+     * - GPU must also support OpenGL ES 3.1 or higher
+     *
+     * @return true if Vulkan 1.3+ is supported for MPV, false otherwise
+     */
+    fun isVulkanSupported(context: Context): Boolean {
+        try {
+            // Vulkan 1.3 requires Android 13 (API 33) minimum
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                Log.d(TAG, "Vulkan not supported: Android version ${Build.VERSION.SDK_INT} < 33 (Tiramisu)")
+                return false
+            }
+
+            val packageManager = context.packageManager
+
+            // Check for OpenGL ES 3.1+ support (required by Android for Vulkan)
+            val configInfo = packageManager.systemAvailableFeatures
+                .firstOrNull { it.name == null }
+
+            val glesVersion = configInfo?.reqGlEsVersion ?: 0
+            val glesMajor = glesVersion shr 16
+            val glesMinor = glesVersion and 0xFFFF
+
+            Log.d(TAG, "Device OpenGL ES version: $glesMajor.$glesMinor (raw: 0x${glesVersion.toString(16)})")
+
+            // OpenGL ES 3.1 = 0x00030001
+            if (glesVersion < 0x00030001) {
+                Log.d(TAG, "Vulkan not supported: OpenGL ES $glesMajor.$glesMinor < 3.1")
+                return false
+            }
+
+            // Check for Vulkan 1.3 hardware version (required for proper MPV support)
+            if (packageManager.hasSystemFeature(
+                    PackageManager.FEATURE_VULKAN_HARDWARE_VERSION,
+                    0x00403000 // Vulkan 1.3
+                )) {
+                Log.d(TAG, "Vulkan 1.3 supported ✓")
+                return true
+            }
+
+            Log.d(TAG, "Vulkan not supported: Vulkan 1.3 not available")
+            return false
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking Vulkan support", e)
+            return false
+        }
+    }
+}
