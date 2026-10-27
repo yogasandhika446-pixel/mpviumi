@@ -20,7 +20,7 @@ class SubtitlesPreferences(
 
   val fontsFolder = preferenceStore.getString("sub_fonts_folder")
   val font = preferenceStore.getString("sub_font", "")
-  val fontSize = preferenceStore.getInt("sub_font_size", 45)
+  val fontSize = preferenceStore.getInt("sub_font_size", 44)
   val subScale = preferenceStore.getFloat("sub_scale", 1f)
   
   // DIPERBAIKI: Menggunakan getFloat dan menambahkan akhiran 'f'
